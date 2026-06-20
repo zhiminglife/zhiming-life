@@ -1,0 +1,32 @@
+[project]
+name = "zhiming-life"
+version = "0.1.0"
+description = "知命·开源版——多智能体命理系统的构建思路 + 简单对话 demo（https://zhiming.life 的开源教学版）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "zhiming.life" }]
+keywords = ["八字", "命理", "multi-agent", "llm", "bazi", "fortune-telling"]
+
+dependencies = [
+    # 历法库不走 pip——用 zhiming_life/vendor/ 里自维护的版本（见 vendor/README.md）
+    "openai>=1.0",           # 通用 OpenAI 兼容 LLM 客户端
+    "python-dotenv>=1.0",    # 自动加载 .env（不自己手写 env 解析）
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://zhiming.life"
+Source = "https://github.com/ma-pony/zhiming-ai"
+
+[project.scripts]
+zhiming-life = "zhiming_life.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["zhiming_life"]
