@@ -19,7 +19,7 @@ dev = ["pytest>=8.0"]
 
 [project.urls]
 Homepage = "https://zhiming.life"
-Source = "https://github.com/ma-pony/zhiming-ai"
+Source = "https://github.com/ma-pony/zhiming-life"
 
 [project.scripts]
 zhiming-life = "zhiming_life.cli:main"
