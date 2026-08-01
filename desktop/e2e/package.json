@@ -1,0 +1,17 @@
+{
+  "name": "zhiming-life-windows-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "wdio run wdio.conf.js"
+  },
+  "devDependencies": {
+    "@wdio/cli": "^9.19.0",
+    "@wdio/local-runner": "^9.19.0",
+    "@wdio/mocha-framework": "^9.19.0",
+    "@wdio/spec-reporter": "^9.19.0"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.0.5"
+  }
+}

@@ -13,10 +13,57 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
+from typing import Iterator
 
 
 class LLMConfigError(RuntimeError):
     """缺 API key 等配置问题——给一句人话提示，不抛栈。"""
+
+
+@dataclass(frozen=True)
+class LLMConfig:
+    """One OpenAI-compatible endpoint configuration."""
+
+    api_key: str
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini"
+
+
+_active_config: ContextVar[LLMConfig | None] = ContextVar(
+    "zhiming_life_llm_config", default=None
+)
+
+
+@contextmanager
+def use_config(config: LLMConfig) -> Iterator[None]:
+    """Temporarily use a model config for the current request context."""
+
+    token = _active_config.set(config)
+    try:
+        yield
+    finally:
+        _active_config.reset(token)
+
+
+def current_config() -> LLMConfig:
+    configured = _active_config.get()
+    if configured is not None:
+        return configured
+
+    api_key = os.getenv("ZHIMING_LIFE_API_KEY")
+    if not api_key:
+        raise LLMConfigError(
+            "未设置 API key。请在桌面端模型设置中填写，或设置 "
+            "ZHIMING_LIFE_API_KEY。"
+        )
+    return LLMConfig(
+        api_key=api_key,
+        base_url=os.getenv("ZHIMING_LIFE_BASE_URL", "https://api.openai.com/v1"),
+        model=os.getenv("ZHIMING_LIFE_MODEL", "gpt-4o-mini"),
+    )
 
 
 def _client():
@@ -27,18 +74,12 @@ def _client():
             "未安装 openai 库。请先 `pip install openai`（见 README 快速开始）。"
         ) from e
 
-    api_key = os.getenv("ZHIMING_LIFE_API_KEY")
-    if not api_key:
-        raise LLMConfigError(
-            "未设置 ZHIMING_LIFE_API_KEY。复制 .env.example 为 .env 填上你的 key，"
-            "或 `export ZHIMING_LIFE_API_KEY=...`。"
-        )
-    base_url = os.getenv("ZHIMING_LIFE_BASE_URL", "https://api.openai.com/v1")
-    return OpenAI(api_key=api_key, base_url=base_url)
+    config = current_config()
+    return OpenAI(api_key=config.api_key, base_url=config.base_url)
 
 
 def model_name() -> str:
-    return os.getenv("ZHIMING_LIFE_MODEL", "gpt-4o-mini")
+    return current_config().model
 
 
 def chat(system: str, messages: list[dict], *, temperature: float = 0.7) -> str:

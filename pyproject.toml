@@ -16,6 +16,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+desktop = [
+    "fastapi>=0.115,<1",
+    "fastembed>=0.5,<1",
+    "keyring>=25,<27",
+    "onnxruntime>=1.20,<2",
+    "python-multipart>=0.0.20,<1",
+    "sqlite-vec>=0.1.6,<1",
+    "uvicorn[standard]>=0.30,<1",
+]
+desktop-build = ["pyinstaller>=6,<7"]
 
 [project.urls]
 Homepage = "https://zhiming.life"

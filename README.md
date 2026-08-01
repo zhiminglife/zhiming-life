@@ -1,73 +1,95 @@
 # 知命 · 开源版（zhiming-life）
 
-> 一个**懂行的人愿意用**的命理 AI 该怎么搭？这是 [**zhiming.life**](https://zhiming.life)
-> 的开源版——把多智能体命理系统的**构建思路**讲清楚，并附一个能跑的**简单对话 demo**。
+> [**zhiming.life**](https://zhiming.life) 的开源本地桌面版：自己配置模型，命册、咨询和 RAG 资料保存在自己的电脑上；同时保留完整的多智能体命理系统教学骨架。
 
 ---
 
-## 这个项目想给你什么
+## 这个项目提供什么
 
-市面上的「AI 算命」大多是 GPT 套个壳：丢一句生辰，让大模型自由发挥。知命想做的是
-另一种东西——**推理流程看得见**的多智能体系统。这个开源版给你一个能跑起来、能改、
-能学的最小实现：
+知命不只是给大模型套一层命理提示词，而是把问诊、确定性排盘、资料检索和专家解读拆成可检查的步骤。当前仓库已经提供一条真实可运行的桌面主线：
 
-- ✅ **多智能体编排骨架**：前台问诊分诊（Supervisor）→ 确定性排盘 → 专家解读（Specialist）怎么咬合
-- ✅ **确定性算法层**：八字排盘（基于公开历法）+「算法只给客观事实、评估交给上层」的边界设计
-- ✅ **prompt 工程思路**：身份 / 铁律 / 结构化分段输出的**骨架**
-- ✅ **RAG 设计思路**：怎么给师傅投喂参考资料
-- ✅ **一个能跑的终端对话 demo**
+- **macOS / Windows 桌面壳**：Tauri 2 + React，Python FastAPI 作为 sidecar
+- **多人命册**：一个本地使用者管理多位命主，双人咨询可关联两份命册
+- **多智能体编排**：问诊分诊（Supervisor）→ 确定性排盘 → 专家解读（Specialist）
+- **确定性算法层**：八字排盘基于公开历法，算法只给客观事实，评估交给上层
+- **双 RAG 库**：知识库与匿名命例库使用两个独立 SQLite 文件，支持 TXT / Markdown 导入、内容去重、替换和删除
+- **本地向量检索**：FastEmbed + ONNX Runtime + sqlite-vec，并增加本地 reranker
+- **完整离线资源**：embedding、reranker、预填充知识库和命例库随安装包提供
+- **自定义模型**：支持任意 OpenAI 兼容接口；API Key 只写入 macOS Keychain / Windows 凭据库
+- **依据可见**：每轮咨询实际命中的本地知识和匿名命例会显示在右栏
 
-深入的设计思路看 **[ARCHITECTURE.md](ARCHITECTURE.md)**。
+深入的设计思路见 **[ARCHITECTURE.md](ARCHITECTURE.md)**。
 
-## 快速开始
+## 桌面版开发运行
+
+需要 Python 3.10+、Node.js 20+，以及通过 [rustup](https://rustup.rs/) 安装的 Rust stable。
 
 ```bash
-# 1. 装依赖（建议用虚拟环境）
+python3 -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -e ".[desktop,dev]"
+
+cd desktop
+npm install
+npm run dev                          # FastAPI + Vite 浏览器开发
+# 或 npm run tauri:dev               # Tauri 桌面窗口
+```
+
+首次打开先填写 API 地址、模型名和 API Key，再新增命主。内置 ONNX 模型和预填充资料库随安装包提供，不需要首次启动时下载。
+
+### 构建安装包
+
+macOS Apple Silicon DMG 和 Windows x64 NSIS 安装包统一由 GitHub Actions 构建。工作流会先在对应系统运行 Python、React、TypeScript、Rust 和依赖安全检查；全部通过后才构建 sidecar 与安装包，并继续验证离线 RAG、安装包内容和应用启动。验证通过的产物可以在对应 Actions 任务的 Artifacts 中下载。
+
+需要手动构建时，在 GitHub 仓库的 Actions 页面运行 `Desktop validation and packages`。打包配置和验证脚本全部保存在本仓库中，不依赖闭源桌面运行时。
+
+## 保留的终端教学版
+
+```bash
+# 1. 安装依赖
 pip install -e .
 
-# 2. 配好 LLM（任意 OpenAI 兼容端点：OpenAI / DeepSeek / 本地 Ollama / 中转）
-cp .env.example .env        # 然后编辑 .env 填上你的 API key
-#   或直接 export ZHIMING_LIFE_API_KEY=sk-...
+# 2. 配置任意 OpenAI 兼容端点
+cp .env.example .env
 
-# 3. 跑起来——终端对话
+# 3. 启动终端对话
 python -m zhiming_life
 ```
 
-然后报上生辰（公历农历都行），或直接问问题，看完整的「问诊 → 排盘 → 解读」链路。
+终端版继续从 `.env` 读取模型配置，用于快速体验「问诊 → 排盘 → 解读」。桌面版在界面中配置模型，不把 API Key 写入 `.env` 或 SQLite。
 
-> 启动时会用 `python-dotenv` 自动加载当前目录的 `.env`，不用手动 `export`。
+## 代码导览
 
-## 代码导览（建议阅读顺序）
-
-```
+```text
 zhiming_life/
-├── conductor.py          ← 先看这个：单轮编排，一眼看懂多智能体怎么协作
+├── conductor.py          ← 单轮编排，串联问诊、排盘、检索和解读
 ├── agents/
-│   ├── supervisor.py     ← 问诊 + 路由，输出结构化决策
-│   └── bazi_master.py    ← 在算好的盘面上做分段解读
-├── core/
-│   ├── bazi.py           ← 八字排盘（真能跑，历法库在 vendor/ 自带）
-│   └── wuxing.py         ← 五行生克映射 +「只给关系不给方向」的边界
-├── prompts/              ← prompt 结构骨架（见 prompts/README.md）
-├── rag/                  ← RAG 接口（自己接语料，见 rag/README.md）
-├── vendor/               ← 自维护的历法库（见 vendor/README.md）
-└── cli.py                ← 终端对话入口
+│   ├── supervisor.py     ← 问诊与路由
+│   └── bazi_master.py    ← 在客观盘面与检索依据上解读
+├── core/                 ← 确定性八字排盘和五行关系
+├── desktop_api/          ← FastAPI、SQLite、双 RAG、系统密钥存储
+├── prompts/              ← prompt 结构骨架
+├── rag/                  ← 终端版兼容检索接口
+└── vendor/               ← 自维护历法库
+
+desktop/
+├── src/                  ← React 三栏桌面界面
+├── src-tauri/            ← Tauri 2 壳层、平台配置和图标
+├── scripts/              ← sidecar、资源构建和安装包烟测
+└── e2e/                  ← Windows 安装后原生 E2E
 ```
 
-## 说明
+## 当前边界
 
-- 这是一个**最小骨架**，不是生产级：没有鉴权、限流、持久化、流式、并发控制——
-  那些工程设施会把骨架淹没，这里有意省掉，专心讲清「多智能体怎么搭」。
-- 解读质量取决于你接的模型 + 你自己往 prompt / RAG 里填的内容。
+当前实现八字咨询、多命主、本地对话和双 RAG。暂不提供紫微、登录、支付、云同步、后台、OCR/PDF 导入和流式输出。命例必须由用户确认匿名化后才能导入。解读质量取决于接入的模型和资料质量。
 
 ## 免责声明
 
-命理内容仅供文化研究与娱乐参考，不构成医疗、法律、投资等任何决策建议。
-信命不认命——命盘揭示倾向，不预设终局。
+命理内容仅供文化研究与娱乐参考，不构成医疗、法律、投资等任何决策建议。信命不认命——命盘揭示倾向，不预设终局。
 
 ## License
 
-MIT。算法与骨架随便用、随便改，拿去搭你自己的东西。
+MIT。
 
 ---
 

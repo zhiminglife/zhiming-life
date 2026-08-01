@@ -1,0 +1,304 @@
+name: Desktop validation and packages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop.yml"
+      - ".gitattributes"
+      - "desktop/**"
+      - "pyproject.toml"
+      - "zhiming_life/**"
+      - "tests/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/desktop.yml"
+      - ".gitattributes"
+      - "desktop/**"
+      - "pyproject.toml"
+      - "zhiming_life/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Test and package Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUTF8: "1"
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Check out source and bundled models
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify Git LFS model payloads
+        shell: pwsh
+        run: |
+          $embedding = Get-Item "desktop/src-tauri/resources/models/embedding/model_optimized.onnx"
+          $reranker = Get-Item "desktop/src-tauri/resources/models/reranker/onnx/model_int8.onnx"
+          if ($embedding.Length -lt 50MB -or $reranker.Length -lt 200MB) {
+            throw "Bundled ONNX models are missing or still Git LFS pointer files"
+          }
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            desktop/e2e/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install Python dependencies
+        run: python -m pip install -e ".[dev,desktop,desktop-build]"
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Install Windows E2E dependencies
+        working-directory: desktop/e2e
+        run: npm ci
+
+      - name: Python tests
+        run: python -m pytest -q
+
+      - name: Frontend tests
+        working-directory: desktop
+        run: npm test
+
+      - name: Frontend production build
+        working-directory: desktop
+        run: npm run build
+
+      - name: Rust format and type checks
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --all -- --check
+          cargo check --locked --target x86_64-pc-windows-msvc
+
+      - name: Audit frontend dependencies
+        working-directory: desktop
+        run: npm audit --audit-level=high
+
+      - name: Audit Windows E2E dependencies
+        working-directory: desktop/e2e
+        run: npm audit --audit-level=high
+
+      - name: Build Windows sidecar and NSIS package
+        working-directory: desktop
+        run: npm run tauri:build
+
+      - name: Smoke-test frozen Windows sidecar
+        shell: pwsh
+        run: |
+          ./desktop/scripts/windows-sidecar-smoke.ps1 `
+            -Binary "desktop/src-tauri/binaries/zhiming-api-x86_64-pc-windows-msvc.exe" `
+            -ResourceDir "desktop/src-tauri/resources"
+
+      - name: Install NSIS package silently
+        id: install
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "desktop/src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if ($null -eq $installer) { throw "NSIS installer was not produced" }
+          $install = Start-Process $installer.FullName -ArgumentList "/S" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "NSIS install failed with exit code $($install.ExitCode)" }
+
+          $sidecar = Get-ChildItem $env:LOCALAPPDATA -Filter "zhiming-api.exe" -File -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if ($null -eq $sidecar) { throw "Installed sidecar was not found" }
+          $application = Get-ChildItem $sidecar.DirectoryName -Filter "*.exe" -File |
+            Where-Object { $_.Name -notin @("zhiming-api.exe", "uninstall.exe") } |
+            Select-Object -First 1
+          if ($null -eq $application) { throw "Installed application executable was not found" }
+
+          $bytes = [System.IO.File]::ReadAllBytes($application.FullName)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+          $optionalHeaderOffset = $peOffset + 24
+          $subsystem = [BitConverter]::ToUInt16($bytes, $optionalHeaderOffset + 68)
+          if ($subsystem -ne 2) {
+            throw "Installed application is not a Windows GUI executable (PE subsystem: $subsystem)"
+          }
+
+          "ZHIMING_LIFE_WINDOWS_APP=$($application.FullName)" >> $env:GITHUB_ENV
+          "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Install matching Edge WebDriver and tauri-driver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
+          cargo install tauri-driver --locked
+
+      - name: Windows native application E2E
+        working-directory: desktop/e2e
+        shell: pwsh
+        run: |
+          $fake = Start-Process python -ArgumentList "fake-openai.py" -PassThru -WindowStyle Hidden
+          try {
+            npm test
+          } finally {
+            Stop-Process -Id $fake.Id -Force -ErrorAction SilentlyContinue
+          }
+          Start-Sleep -Seconds 3
+          $remaining = Get-Process -Name "zhiming-api" -ErrorAction SilentlyContinue
+          if ($null -ne $remaining) {
+            $remaining | Stop-Process -Force
+            throw "Desktop E2E left zhiming-api.exe running"
+          }
+
+      - name: Record Windows validation summary
+        shell: pwsh
+        run: |
+          @"
+          ## Windows x64 validation passed
+
+          - Python, React, TypeScript and Rust checks passed before packaging
+          - Frozen PyInstaller sidecar passed offline sqlite-vec search and CORS checks
+          - Parent-process shutdown removed the sidecar
+          - Offline NSIS installed silently and the app uses the Windows GUI subsystem
+          - WebDriver opened the installed Tauri application and read both bundled libraries
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload verified Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhiming-life-windows-x64
+          if-no-files-found: error
+          retention-days: 14
+          path: desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+
+  macos:
+    name: Test and package macOS Apple Silicon
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      PYTHONUTF8: "1"
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Check out source and bundled models
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify Apple Silicon runner and Git LFS model payloads
+        shell: bash
+        run: |
+          test "$(uname -m)" = "arm64"
+          test "$(stat -f%z desktop/src-tauri/resources/models/embedding/model_optimized.onnx)" -gt 52428800
+          test "$(stat -f%z desktop/src-tauri/resources/models/reranker/onnx/model_int8.onnx)" -gt 209715200
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install Python dependencies
+        run: python -m pip install -e ".[dev,desktop,desktop-build]"
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Python tests
+        run: python -m pytest -q
+
+      - name: Frontend tests
+        working-directory: desktop
+        run: npm test
+
+      - name: Frontend production build
+        working-directory: desktop
+        run: npm run build
+
+      - name: Rust format and type checks
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --all -- --check
+          cargo check --locked --target aarch64-apple-darwin
+
+      - name: Audit frontend dependencies
+        working-directory: desktop
+        run: npm audit --audit-level=high
+
+      - name: Build macOS sidecar and DMG
+        working-directory: desktop
+        run: npm run tauri:build
+
+      - name: Smoke-test frozen sidecar and packaged application
+        shell: bash
+        run: |
+          bash desktop/scripts/macos-package-smoke.sh \
+            desktop/src-tauri/binaries/zhiming-api-aarch64-apple-darwin \
+            desktop/src-tauri/resources \
+            desktop/src-tauri/target/release/bundle/dmg/*_aarch64.dmg
+
+      - name: Record macOS validation summary
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## macOS Apple Silicon validation passed
+
+          - Python, React, TypeScript and Rust checks passed before packaging
+          - Frozen PyInstaller sidecar passed offline sqlite-vec search and CORS checks
+          - The DMG mounted and contained ARM64 app and sidecar executables
+          - The packaged application launched and started its bundled sidecar
+          - Parent-process shutdown removed the sidecar
+          EOF
+
+      - name: Upload verified macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhiming-life-macos-apple-silicon
+          if-no-files-found: error
+          retention-days: 14
+          path: desktop/src-tauri/target/release/bundle/dmg/*_aarch64.dmg

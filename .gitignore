@@ -15,8 +15,18 @@ venv/
 data/corpus/
 data/local/
 *.sqlite
+!desktop/src-tauri/resources/seeds/*.sqlite
 
 # 编辑器 / 系统
 .idea/
 .vscode/
 .DS_Store
+
+# Desktop build and local data
+desktop/node_modules/
+desktop/e2e/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/binaries/
+desktop/src-tauri/resources/models/**/.cache/
+.zhiming-life-data/

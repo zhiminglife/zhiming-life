@@ -19,7 +19,14 @@ from zhiming_life.agents import bazi_master, supervisor
 from zhiming_life.core import paipan
 
 
-def run_turn(history: list[dict], user_message: str) -> tuple[str, list[dict]]:
+def run_turn(
+    history: list[dict],
+    user_message: str,
+    *,
+    known_birth: dict | None = None,
+    references: str = "",
+    related_person_context: str = "",
+) -> tuple[str, list[dict]]:
     """处理一轮用户输入，返回（给用户的回复，更新后的对话历史）。
 
     history 是 [{"role": "user"|"assistant", "content": str}, ...]。
@@ -28,19 +35,39 @@ def run_turn(history: list[dict], user_message: str) -> tuple[str, list[dict]]:
     """
     history = [*history, {"role": "user", "content": user_message}]
 
-    decision = supervisor.decide(history)
+    birth_is_complete = (
+        bool(known_birth)
+        and all(
+            known_birth.get(key) is not None
+            for key in ("year", "month", "day", "hour", "calendar")
+        )
+        and int(known_birth["hour"]) >= 0
+    )
+    decision = None if birth_is_complete else supervisor.decide(history)
 
-    # 缺信息 / 非命理：supervisor 自己接住，不惊动宗师
-    if not (decision.ready and decision.route == "bazi" and decision.birth):
+    # 生辰没齐 / 非命理：supervisor 自己接住，不惊动宗师。
+    if decision is not None and not (
+        decision.ready and decision.route == "bazi" and decision.birth
+    ):
         reply = decision.reply or "再说说看？"
         return reply, [*history, {"role": "assistant", "content": reply}]
 
     # 信息齐：确定性排盘 → 宗师解读
-    b = decision.birth
+    b = known_birth if birth_is_complete else decision.birth
     chart = paipan(
-        year=int(b["year"]), month=int(b["month"]), day=int(b["day"]),
-        hour=int(b["hour"]), calendar=b.get("calendar", "solar"),
+        year=int(b["year"]),
+        month=int(b["month"]),
+        day=int(b["day"]),
+        hour=int(b["hour"]),
+        calendar=b.get("calendar", "solar"),
+        is_leap_month=bool(b.get("is_leap_month", False)),
     )
     # 用户这一轮的原话作为「想了解什么」——supervisor 已确认是综述类需求
-    reading = bazi_master.read(chart, question=user_message, history=history[:-1])
+    reading = bazi_master.read(
+        chart,
+        question=user_message,
+        history=history[:-1],
+        references=references,
+        related_person_context=related_person_context,
+    )
     return reading, [*history, {"role": "assistant", "content": reading}]

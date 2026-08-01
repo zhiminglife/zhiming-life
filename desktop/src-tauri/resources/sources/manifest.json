@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "kind": "knowledge",
+      "title": "八字解读的证据边界",
+      "source_name": "知命内置知识 · 原创整理 · v1",
+      "file": "knowledge/evidence-boundaries.md"
+    },
+    {
+      "kind": "knowledge",
+      "title": "事业与关系咨询的分析框架",
+      "source_name": "知命内置知识 · 原创整理 · v1.1",
+      "file": "knowledge/career-and-relationship.md"
+    },
+    {
+      "kind": "cases",
+      "title": "匿名命例：事业调整与伴侣沟通",
+      "source_name": "知命内置命例 · 虚构教学案例 · C001",
+      "file": "cases/career-couple-c001.md"
+    },
+    {
+      "kind": "cases",
+      "title": "匿名命例：职业转向与家庭节奏",
+      "source_name": "知命内置命例 · 虚构教学案例 · C002",
+      "file": "cases/career-family-c002.md"
+    }
+  ]
+}

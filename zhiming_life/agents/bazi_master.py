@@ -8,7 +8,14 @@ from zhiming_life.prompts import BAZI_MASTER_SYSTEM, build_context
 from zhiming_life.rag import retrieve
 
 
-def read(chart: Chart, question: str, history: list[dict]) -> str:
+def read(
+    chart: Chart,
+    question: str,
+    history: list[dict],
+    *,
+    references: str = "",
+    related_person_context: str = "",
+) -> str:
     """生成一段解读。
 
     流程演示了「确定性预跑 + 知识投喂 + 师傅推理」的接缝：
@@ -21,6 +28,10 @@ def read(chart: Chart, question: str, history: list[dict]) -> str:
     context = build_context(chart.render(), question)
     if refs:
         context += "\n\n【参考资料（仅供联想，不可整体类比到本盘）】\n" + refs
+    if references:
+        context += "\n\n【本地知识与匿名命例（仅供联想，不作判决）】\n" + references
+    if related_person_context:
+        context += "\n\n【合看命主（客观排盘）】\n" + related_person_context
 
     messages = [*history, {"role": "user", "content": context}]
     return llm.chat(BAZI_MASTER_SYSTEM, messages, temperature=0.8)
