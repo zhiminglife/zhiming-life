@@ -75,6 +75,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
+          cache-on-failure: true
 
       - name: Install Python dependencies
         run: python -m pip install -e ".[dev,desktop,desktop-build]"
@@ -94,10 +95,6 @@ jobs:
         working-directory: desktop
         run: npm test
 
-      - name: Frontend production build
-        working-directory: desktop
-        run: npm run build
-
       - name: Rust format and type checks
         working-directory: desktop/src-tauri
         run: |
@@ -112,9 +109,17 @@ jobs:
         working-directory: desktop/e2e
         run: npm audit --audit-level=high
 
-      - name: Build Windows sidecar and NSIS package
+      - name: Build Windows sidecar
         working-directory: desktop
-        run: npm run tauri:build
+        run: npm run sidecar:build
+
+      - name: Build Windows Tauri executable
+        working-directory: desktop
+        run: npm run tauri:compile:ci
+
+      - name: Bundle fast Windows NSIS package
+        working-directory: desktop
+        run: npm run tauri:bundle:ci -- --bundles nsis
 
       - name: Smoke-test frozen Windows sidecar
         shell: pwsh
@@ -245,6 +250,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
+          cache-on-failure: true
 
       - name: Install Python dependencies
         run: |
@@ -262,10 +268,6 @@ jobs:
         working-directory: desktop
         run: npm test
 
-      - name: Frontend production build
-        working-directory: desktop
-        run: npm run build
-
       - name: Rust format and type checks
         working-directory: desktop/src-tauri
         run: |
@@ -276,9 +278,17 @@ jobs:
         working-directory: desktop
         run: npm audit --audit-level=high
 
-      - name: Build macOS sidecar and DMG
+      - name: Build macOS sidecar
         working-directory: desktop
-        run: npm run tauri:build
+        run: npm run sidecar:build
+
+      - name: Build macOS Tauri executable
+        working-directory: desktop
+        run: npm run tauri:compile:ci
+
+      - name: Bundle macOS DMG
+        working-directory: desktop
+        run: npm run tauri:bundle:ci -- --bundles dmg
 
       - name: Smoke-test frozen sidecar and packaged application
         shell: bash
