@@ -3,8 +3,25 @@ describe("Windows 安装包", () => {
     const body = await $("body");
     await body.waitForExist({ timeout: 120_000 });
 
-    const initialText = await body.getText();
-    expect(initialText).not.toContain("本地服务未连接");
+    await browser.waitUntil(
+      async () => {
+        const text = await $("body").getText();
+        if (text.includes("本地服务未连接")) {
+          throw new Error(`本地服务启动失败：${text}`);
+        }
+        return !text.includes("正在启动本地服务并准备资料…");
+      },
+      {
+        timeout: 180_000,
+        interval: 500,
+        timeoutMsg: "本地服务在 180 秒内未完成首次启动",
+      },
+    );
+
+    const initialText = await $("body").getText();
+    expect(
+      initialText.includes("先连接你的模型") || initialText.includes("命册尚空"),
+    ).toBe(true);
 
     if (initialText.includes("先连接你的模型")) {
       const inputs = await $$("form input");
@@ -14,7 +31,7 @@ describe("Windows 安装包", () => {
       await $("button=保存并进入命册").click();
     }
 
-    await $("h1=命册尚空").waitForExist({ timeout: 120_000 });
+    await $("h1=命册尚空").waitForExist({ timeout: 180_000 });
     await $("button[aria-label='资料库']").click();
 
     const dialog = await $("[role='dialog']");
