@@ -30,3 +30,11 @@ desktop/src-tauri/target/
 desktop/src-tauri/binaries/
 desktop/src-tauri/resources/models/**/.cache/
 .zhiming-life-data/
+
+# Local AI/Trellis development tooling and session state
+.agents/
+.claude/
+.codex/
+.superpowers/
+.trellis/
+AGENTS.md
