@@ -219,11 +219,15 @@ jobs:
           test "$(stat -f%z desktop/src-tauri/resources/models/embedding/model_optimized.onnx)" -gt 52428800
           test "$(stat -f%z desktop/src-tauri/resources/models/reranker/onnx/model_int8.onnx)" -gt 209715200
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
+      - name: Set up Homebrew Python with SQLite extension support
+        shell: bash
+        run: |
+          brew install python@3.13
+          python_bin="$(brew --prefix python@3.13)/bin/python3.13"
+          "$python_bin" -m venv "$RUNNER_TEMP/zhiming-python"
+          venv_python="$RUNNER_TEMP/zhiming-python/bin/python"
+          "$venv_python" -c 'import sqlite3; connection = sqlite3.connect(":memory:"); assert hasattr(connection, "enable_load_extension")'
+          echo "ZHIMING_LIFE_PYTHON=$venv_python" >> "$GITHUB_ENV"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -243,14 +247,16 @@ jobs:
           workspaces: desktop/src-tauri
 
       - name: Install Python dependencies
-        run: python -m pip install -e ".[dev,desktop,desktop-build]"
+        run: |
+          "${ZHIMING_LIFE_PYTHON}" -m pip install -e ".[dev,desktop,desktop-build]"
 
       - name: Install frontend dependencies
         working-directory: desktop
         run: npm ci
 
       - name: Python tests
-        run: python -m pytest -q
+        run: |
+          "${ZHIMING_LIFE_PYTHON}" -m pytest -q
 
       - name: Frontend tests
         working-directory: desktop

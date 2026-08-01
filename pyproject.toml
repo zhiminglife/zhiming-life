@@ -29,7 +29,7 @@ desktop-build = ["pyinstaller>=6,<7"]
 
 [project.urls]
 Homepage = "https://zhiming.life"
-Source = "https://github.com/ma-pony/zhiming-life"
+Source = "https://github.com/zhiminglife/zhiming-life"
 
 [project.scripts]
 zhiming-life = "zhiming_life.cli:main"
