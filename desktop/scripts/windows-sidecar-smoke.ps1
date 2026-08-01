@@ -37,17 +37,17 @@ try {
     }
 
     $headers = @{ "X-Zhiming-Token" = $token }
-    $libraries = @(Invoke-RestMethod "http://127.0.0.1:$port/api/libraries" -Headers $headers)
-    if ($libraries.Count -ne 2) {
-        throw "Expected two physical RAG libraries, got $($libraries.Count)"
+    $libraries = Invoke-RestMethod "http://127.0.0.1:$port/api/libraries" -Headers $headers
+    if (@($libraries).Count -ne 2) {
+        throw "Expected two physical RAG libraries, got $(@($libraries).Count)"
     }
     foreach ($kind in @("knowledge", "cases")) {
         $library = $libraries | Where-Object { $_.kind -eq $kind }
         if ($null -eq $library -or $library.vector_backend -ne "sqlite-vec" -or $library.source_count -lt 1) {
             throw "$kind library is not ready with sqlite-vec and bundled sources"
         }
-        $hits = @(Invoke-RestMethod "http://127.0.0.1:$port/api/libraries/$kind/search?q=%E4%BA%8B%E4%B8%9A&limit=2" -Headers $headers -TimeoutSec 120)
-        if ($hits.Count -lt 1) {
+        $hits = Invoke-RestMethod "http://127.0.0.1:$port/api/libraries/$kind/search?q=%E4%BA%8B%E4%B8%9A&limit=2" -Headers $headers -TimeoutSec 120
+        if (@($hits).Count -lt 1) {
             throw "$kind library returned no offline search results"
         }
     }
