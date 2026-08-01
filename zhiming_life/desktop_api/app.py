@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from zhiming_life import conductor, llm
+from zhiming_life.llm import LLMProtocol
 from zhiming_life.core import paipan
 
 from .database import Database, NotFoundError
@@ -28,6 +29,7 @@ from .settings import SettingsError, SettingsService
 
 
 class ModelSettingsWrite(BaseModel):
+    protocol: LLMProtocol = "openai"
     base_url: str
     model: str
     api_key: str | None = None
@@ -186,6 +188,7 @@ def create_app(
                 base_url=payload.base_url,
                 model=payload.model,
                 api_key=payload.api_key,
+                protocol=payload.protocol,
             )
         )
 

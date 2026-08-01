@@ -6,6 +6,7 @@ import type {
   LibrarySource,
   LibraryStatus,
   Message,
+  ModelProtocol,
   ModelSettings,
   Person,
   Session,
@@ -81,6 +82,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const getModelSettings = () => request<ModelSettings>("/api/settings/model");
 
 export const saveModelSettings = (payload: {
+  protocol: ModelProtocol;
   base_url: string;
   model: string;
   api_key?: string;

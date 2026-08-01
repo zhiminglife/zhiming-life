@@ -11,6 +11,7 @@ keywords = ["八字", "命理", "multi-agent", "llm", "bazi", "fortune-telling"]
 dependencies = [
     # 历法库不走 pip——用 zhiming_life/vendor/ 里自维护的版本（见 vendor/README.md）
     "openai>=1.0",           # 通用 OpenAI 兼容 LLM 客户端
+    "httpx>=0.27,<1",        # 三种桌面模型协议的轻量 HTTP 传输
     "python-dotenv>=1.0",    # 自动加载 .env（不自己手写 env 解析）
 ]
 

@@ -1,4 +1,4 @@
-"""LLM 客户端 —— 通用 OpenAI 兼容封装。
+"""LLM 客户端 —— OpenAI、Anthropic 与 Gemini 协议统一入口。
 
 这里只留最朴素的一条：任何 OpenAI 兼容端点（OpenAI / DeepSeek / 本地 Ollama /
 各种中转）都能用，配好环境变量即可。我们想让你看清「多智能体怎么搭」，而不是替你
@@ -16,20 +16,24 @@ import os
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, Literal, cast
 
 
 class LLMConfigError(RuntimeError):
     """缺 API key 等配置问题——给一句人话提示，不抛栈。"""
 
 
+LLMProtocol = Literal["openai", "anthropic", "gemini"]
+
+
 @dataclass(frozen=True)
 class LLMConfig:
-    """One OpenAI-compatible endpoint configuration."""
+    """One provider endpoint configuration."""
 
     api_key: str
     base_url: str = "https://api.openai.com/v1"
     model: str = "gpt-4o-mini"
+    protocol: LLMProtocol = "openai"
 
 
 _active_config: ContextVar[LLMConfig | None] = ContextVar(
@@ -63,19 +67,10 @@ def current_config() -> LLMConfig:
         api_key=api_key,
         base_url=os.getenv("ZHIMING_LIFE_BASE_URL", "https://api.openai.com/v1"),
         model=os.getenv("ZHIMING_LIFE_MODEL", "gpt-4o-mini"),
+        protocol=cast(
+            LLMProtocol, os.getenv("ZHIMING_LIFE_PROTOCOL", "openai")
+        ),
     )
-
-
-def _client():
-    try:
-        from openai import OpenAI
-    except ImportError as e:  # pragma: no cover
-        raise LLMConfigError(
-            "未安装 openai 库。请先 `pip install openai`（见 README 快速开始）。"
-        ) from e
-
-    config = current_config()
-    return OpenAI(api_key=config.api_key, base_url=config.base_url)
 
 
 def model_name() -> str:
@@ -89,10 +84,6 @@ def chat(system: str, messages: list[dict], *, temperature: float = 0.7) -> str:
         system: system prompt（人格 / 框架 / 输出格式都在这里）
         messages: [{"role": "user"|"assistant", "content": str}, ...] 对话历史
     """
-    client = _client()
-    resp = client.chat.completions.create(
-        model=model_name(),
-        temperature=temperature,
-        messages=[{"role": "system", "content": system}, *messages],
-    )
-    return resp.choices[0].message.content or ""
+    from zhiming_life.llm_protocols import chat_completion
+
+    return chat_completion(current_config(), system, messages, temperature)

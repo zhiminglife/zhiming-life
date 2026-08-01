@@ -58,6 +58,7 @@ def test_health_and_write_only_model_settings(tmp_path) -> None:
         )
         assert response.status_code == 200
         assert response.json() == {
+            "protocol": "openai",
             "base_url": "https://gateway.example/v1",
             "model": "example-model",
             "has_api_key": True,

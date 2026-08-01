@@ -36,7 +36,10 @@ export type Message = {
   created_at: string;
 };
 
+export type ModelProtocol = "openai" | "anthropic" | "gemini";
+
 export type ModelSettings = {
+  protocol: ModelProtocol;
   base_url: string;
   model: string;
   has_api_key: boolean;

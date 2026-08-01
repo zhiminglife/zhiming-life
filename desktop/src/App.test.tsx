@@ -62,8 +62,57 @@ beforeEach(() => {
 });
 
 describe("App", () => {
+  it("switches onboarding to the Anthropic defaults and saves the protocol", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
+      base_url: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+      has_api_key: false,
+    });
+    vi.mocked(api.saveModelSettings).mockResolvedValue({
+      protocol: "anthropic",
+      base_url: "https://api.anthropic.com",
+      model: "claude-opus-4-6",
+      has_api_key: true,
+    });
+    vi.mocked(api.testModelSettings).mockResolvedValue({ status: "ok" });
+
+    render(<App />);
+    await user.click(await screen.findByRole("radio", { name: "Anthropic 原生" }));
+
+    expect(screen.getByLabelText("接口地址")).toHaveValue("https://api.anthropic.com");
+    expect(screen.getByLabelText("模型名称")).toHaveValue("claude-opus-4-6");
+    await user.type(screen.getByLabelText("API Key"), "anthropic-key");
+    await user.click(screen.getByRole("button", { name: "保存并进入命册" }));
+
+    await waitFor(() => expect(api.saveModelSettings).toHaveBeenCalledWith({
+      protocol: "anthropic",
+      base_url: "https://api.anthropic.com",
+      model: "claude-opus-4-6",
+      api_key: "anthropic-key",
+    }));
+  });
+
+  it("switches onboarding to the Gemini defaults", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
+      base_url: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+      has_api_key: false,
+    });
+
+    render(<App />);
+    await user.click(await screen.findByRole("radio", { name: "Gemini 原生" }));
+
+    expect(screen.getByLabelText("接口地址")).toHaveValue("https://generativelanguage.googleapis.com/v1beta");
+    expect(screen.getByLabelText("模型名称")).toHaveValue("gemini-3.6-flash");
+  });
+
   it("shows model setup before entering the workspace", async () => {
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: false,
@@ -73,17 +122,20 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "先连接你的模型" })).toBeInTheDocument();
     expect(screen.getByLabelText("API Key")).toHaveAttribute("type", "password");
+    expect(screen.getByRole("link", { name: "访问 zhiming.life 在线版" })).toHaveAttribute("href", "https://zhiming.life/");
   });
 
   it("shows connection progress while validating model settings", async () => {
     const user = userEvent.setup();
     let finishTest: (value: { status: string }) => void = () => undefined;
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: false,
     });
     vi.mocked(api.saveModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: true,
@@ -102,6 +154,7 @@ describe("App", () => {
 
   it("opens the three-column person workspace", async () => {
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: true,
@@ -115,6 +168,9 @@ describe("App", () => {
 
     render(<App />);
 
+    expect(await screen.findByRole("complementary", { name: "案上命册" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "桌前问命" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "命造档案" })).toBeInTheDocument();
     expect((await screen.findAllByText("我自己")).length).toBeGreaterThan(0);
     expect(await screen.findByText("四 柱")).toBeInTheDocument();
     expect(screen.getByText(/辛 · 金/)).toBeInTheDocument();
@@ -124,7 +180,7 @@ describe("App", () => {
   it("creates a person with the complete birth profile", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
-      base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
+      protocol: "openai", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
     });
     vi.mocked(api.createPerson).mockResolvedValue(partner);
     vi.mocked(api.getChart).mockRejectedValue(new Error("not needed"));
@@ -132,10 +188,12 @@ describe("App", () => {
     render(<App />);
     await user.click((await screen.findAllByRole("button", { name: "新增命主" }))[0]);
     await user.type(screen.getByLabelText("称呼"), "周女士");
-    await user.selectOptions(screen.getByLabelText("关系"), "partner");
-    await user.selectOptions(screen.getByLabelText("性别"), "female");
-    await user.selectOptions(screen.getByLabelText("历法"), "solar");
-    await user.type(screen.getByLabelText("出生日期"), "1992-09-08");
+    await user.click(screen.getByRole("radio", { name: "伴侣" }));
+    await user.click(screen.getByRole("radio", { name: "女" }));
+    await user.click(screen.getByRole("radio", { name: "公历" }));
+    await user.type(screen.getByLabelText("出生年份"), "1992");
+    await user.type(screen.getByLabelText("出生月份"), "9");
+    await user.type(screen.getByLabelText("出生日期"), "8");
     await user.selectOptions(screen.getByLabelText("出生时辰"), "9");
     await user.type(screen.getByLabelText("出生地"), "上海");
     await user.type(screen.getByLabelText("已知事实"), "目前从事产品工作");
@@ -156,7 +214,7 @@ describe("App", () => {
   it("creates a consultation with a secondary person", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
-      base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
+      protocol: "openai", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
     });
     vi.mocked(api.listPersons).mockResolvedValue([person, partner]);
     vi.mocked(api.getChart).mockRejectedValue(new Error("not needed"));
@@ -183,10 +241,10 @@ describe("App", () => {
   it("updates model settings from the workspace", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
-      base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
+      protocol: "openai", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
     });
     vi.mocked(api.saveModelSettings).mockResolvedValue({
-      base_url: "https://gateway.example/v1", model: "custom-model", has_api_key: true,
+      protocol: "openai", base_url: "https://gateway.example/v1", model: "custom-model", has_api_key: true,
     });
     vi.mocked(api.testModelSettings).mockResolvedValue({ status: "ok" });
 
@@ -202,7 +260,7 @@ describe("App", () => {
     await user.click(within(dialog).getByRole("button", { name: "保存设置" }));
 
     await waitFor(() => expect(api.saveModelSettings).toHaveBeenCalledWith({
-      base_url: "https://gateway.example/v1", model: "custom-model", api_key: undefined,
+      protocol: "openai", base_url: "https://gateway.example/v1", model: "custom-model", api_key: undefined,
     }));
     expect(api.testModelSettings).toHaveBeenCalledOnce();
   });
@@ -210,6 +268,7 @@ describe("App", () => {
   it("switches between knowledge and anonymized case imports", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: true,
@@ -227,7 +286,7 @@ describe("App", () => {
   it("requires anonymization confirmation before importing a case", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
-      base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
+      protocol: "openai", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
     });
     vi.mocked(api.listPersons).mockResolvedValue([person]);
     vi.mocked(api.getChart).mockRejectedValue(new Error("not needed"));
@@ -251,6 +310,7 @@ describe("App", () => {
   it("shows attributed library sources and deletes a selected source", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: true,
@@ -281,6 +341,7 @@ describe("App", () => {
     const user = userEvent.setup();
     let finishImport: (value: { source_id: string; status: string; chunk_count: number }) => void = () => undefined;
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: true,
@@ -305,6 +366,7 @@ describe("App", () => {
   it("sends a message in an existing consultation", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: true,
@@ -335,7 +397,7 @@ describe("App", () => {
   it("loads consultation history and shows retrieved evidence", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
-      base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
+      protocol: "openai", base_url: "https://api.deepseek.com/v1", model: "deepseek-chat", has_api_key: true,
     });
     vi.mocked(api.listPersons).mockResolvedValue([person]);
     vi.mocked(api.listSessions).mockResolvedValue([{
@@ -370,6 +432,7 @@ describe("App", () => {
   it("recovers from a failed consultation creation instead of staying busy", async () => {
     const user = userEvent.setup();
     vi.mocked(api.getModelSettings).mockResolvedValue({
+      protocol: "openai",
       base_url: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       has_api_key: true,
